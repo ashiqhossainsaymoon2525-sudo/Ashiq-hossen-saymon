@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.audio.AdhanAudioPlayer
 import com.example.audio.QuranAudioPlayer
 import com.example.sensors.QiblaManager
 import com.example.ui.screens.DailyDuaScreen
@@ -41,6 +42,7 @@ enum class IslamicTab(val titleBn: String, val icon: androidx.compose.ui.graphic
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioPlayer: QuranAudioPlayer
+    private lateinit var adhanPlayer: AdhanAudioPlayer
     private lateinit var qiblaManager: QiblaManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,12 +50,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         audioPlayer = QuranAudioPlayer(applicationContext)
+        adhanPlayer = AdhanAudioPlayer(applicationContext)
         qiblaManager = QiblaManager(applicationContext)
 
         setContent {
             MyApplicationTheme {
                 IslamicAppRoot(
                     audioPlayer = audioPlayer,
+                    adhanPlayer = adhanPlayer,
                     qiblaManager = qiblaManager
                 )
             }
@@ -63,6 +67,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         audioPlayer.release()
+        adhanPlayer.release()
         qiblaManager.stopListening()
     }
 }
@@ -70,6 +75,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun IslamicAppRoot(
     audioPlayer: QuranAudioPlayer,
+    adhanPlayer: AdhanAudioPlayer,
     qiblaManager: QiblaManager,
     modifier: Modifier = Modifier
 ) {
@@ -120,6 +126,7 @@ fun IslamicAppRoot(
         when (currentTab) {
             IslamicTab.PRAYER -> PrayerTimesScreen(
                 onNavigateToQibla = { currentTab = IslamicTab.QIBLA },
+                adhanPlayer = adhanPlayer,
                 modifier = screenModifier
             )
             IslamicTab.QURAN -> QuranScreen(

@@ -22,6 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.audio.AdhanAudioPlayer
 import com.example.data.models.CityLocation
 import com.example.data.models.PrayerTime
 import com.example.data.sources.PrayerTimeCalculator
@@ -31,8 +34,15 @@ import com.example.ui.theme.*
 @Composable
 fun PrayerTimesScreen(
     onNavigateToQibla: () -> Unit,
+    adhanPlayer: AdhanAudioPlayer? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val internalAdhanPlayer = remember { adhanPlayer ?: AdhanAudioPlayer(context) }
+    val adhanState by internalAdhanPlayer.state.collectAsStateWithLifecycle()
+    var selectedReciter by remember { mutableStateOf("মক্কা মুকাররমা") }
+    var showAdhanInfoDialog by remember { mutableStateOf(false) }
+
     var selectedCity by remember { mutableStateOf(PrayerTimeCalculator.cities[0]) }
     var showCityDialog by remember { mutableStateOf(false) }
 
@@ -348,21 +358,197 @@ fun PrayerTimesScreen(
                 }
             }
 
+            // Adhan Live Player & Quick Listening Card
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("adhan_audio_card"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (adhanState.isPlaying) EmeraldPrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.horizontalGradient(
+                            if (adhanState.isPlaying) listOf(GoldAccent, EmeraldPrimary) else listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
+                        )
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(if (adhanState.isPlaying) GoldAccent else EmeraldPrimary),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "আজান শুনুন",
+                                        tint = if (adhanState.isPlaying) EmeraldDark else Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "মধুর আজান শুনুন",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (adhanState.isPlaying) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = EmeraldPrimary
+                                            ) {
+                                                Text(
+                                                    text = "বাজছে",
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = if (adhanState.isPlaying) "ওয়াক্ত: ${adhanState.currentWaqtBn} (${adhanState.reciterNameBn})" else "মুয়াজ্জিন: $selectedReciter",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (adhanState.isBuffering) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = EmeraldPrimary,
+                                    strokeWidth = 3.dp
+                                )
+                            } else {
+                                IconButton(
+                                    onClick = {
+                                        if (adhanState.isPlaying) {
+                                            internalAdhanPlayer.stop()
+                                        } else {
+                                            val isFajr = currentWaqt.contains("ফজর")
+                                            internalAdhanPlayer.playAdhan(
+                                                waqtBn = currentWaqt,
+                                                isFajr = isFajr,
+                                                reciterName = selectedReciter
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(if (adhanState.isPlaying) MaterialTheme.colorScheme.errorContainer else EmeraldPrimary, CircleShape)
+                                        .testTag("adhan_play_toggle_button")
+                                ) {
+                                    Icon(
+                                        imageVector = if (adhanState.isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                        contentDescription = if (adhanState.isPlaying) "আজান থামান" else "আজান চালু করুন",
+                                        tint = if (adhanState.isPlaying) MaterialTheme.colorScheme.onErrorContainer else Color.White
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Quick buttons for Makkah / Madinah and Dua
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = selectedReciter == "মক্কা মুকাররমা",
+                                    onClick = {
+                                        selectedReciter = "মক্কা মুকাররমা"
+                                        if (adhanState.isPlaying) {
+                                            internalAdhanPlayer.playAdhan(
+                                                waqtBn = currentWaqt,
+                                                isFajr = currentWaqt.contains("ফজর"),
+                                                reciterName = "মক্কা মুকাররমা"
+                                            )
+                                        }
+                                    },
+                                    label = { Text("মক্কা আজান", fontSize = 11.sp) }
+                                )
+                                FilterChip(
+                                    selected = selectedReciter == "মসজিদে নববী (মদিনা)",
+                                    onClick = {
+                                        selectedReciter = "মসজিদে নববী (মদিনা)"
+                                        if (adhanState.isPlaying) {
+                                            internalAdhanPlayer.playAdhan(
+                                                waqtBn = currentWaqt,
+                                                isFajr = false,
+                                                reciterName = "মসজিদে নববী (মদিনা)"
+                                            )
+                                        }
+                                    },
+                                    label = { Text("মদিনা আজান", fontSize = 11.sp) }
+                                )
+                            }
+
+                            TextButton(
+                                onClick = { showAdhanInfoDialog = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp), tint = EmeraldPrimary)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("আজানের দোয়া", fontSize = 11.sp, color = EmeraldPrimary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Section Header
             item {
-                Text(
-                    text = "দৈনিক ৫ ওয়াক্ত সালাত",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "দৈনিক ৫ ওয়াক্ত সালাত",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                    )
+                    Text(
+                        text = "আইকনে চাপ দিয়ে আজান শুনুন",
+                        fontSize = 11.sp,
+                        color = EmeraldPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             // List of 5 prayers + Sunrise
             items(prayers) { prayer ->
                 val isCurrent = prayer.isWaqtCurrent
                 val isNext = prayer.isNext
+                val isPrayerPlaying = adhanState.isPlaying && adhanState.currentWaqtBn == prayer.nameBn
 
                 Card(
                     modifier = Modifier
@@ -377,11 +563,14 @@ fun PrayerTimesScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -455,12 +644,49 @@ fun PrayerTimesScreen(
                             }
                         }
 
-                        Text(
-                            text = prayer.timeStr,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = if (isCurrent) GoldLight else EmeraldPrimary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = prayer.timeStr,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = if (isCurrent) GoldLight else EmeraldPrimary
+                            )
+
+                            if (prayer.id != "sunrise") {
+                                Spacer(modifier = Modifier.width(10.dp))
+                                IconButton(
+                                    onClick = {
+                                        if (isPrayerPlaying) {
+                                            internalAdhanPlayer.stop()
+                                        } else {
+                                            val isFajr = prayer.id == "fajr"
+                                            internalAdhanPlayer.playAdhan(
+                                                waqtBn = prayer.nameBn,
+                                                isFajr = isFajr,
+                                                reciterName = selectedReciter
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .background(
+                                            if (isPrayerPlaying) MaterialTheme.colorScheme.errorContainer
+                                            else if (isCurrent) Color.White.copy(alpha = 0.2f)
+                                            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                            CircleShape
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPrayerPlaying) Icons.Default.Stop else Icons.Default.VolumeUp,
+                                        contentDescription = "আজান শুনুন",
+                                        tint = if (isPrayerPlaying) MaterialTheme.colorScheme.error
+                                        else if (isCurrent) GoldLight
+                                        else EmeraldPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -542,6 +768,66 @@ fun PrayerTimesScreen(
             confirmButton = {
                 TextButton(onClick = { showCityDialog = false }) {
                     Text("বাতিল")
+                }
+            }
+        )
+    }
+
+    // Adhan and Dua Modal Dialog
+    if (showAdhanInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdhanInfoDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.VolumeUp, contentDescription = null, tint = EmeraldPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("আজান ও আজানের দোয়া", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "আজানের দোআ (বাংলা উচ্চারণ):",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = EmeraldPrimary
+                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = "“আল্লাহুম্মা রব্বা হাযিহিদ দাওয়াতিত তাম্মাহ, ওয়াস সালাতিল কায়িমাহ, আতি মুহাম্মাদানিল ওয়াসিলাতা ওয়াল ফাদিলাহ, ওয়াব'আসহু মাক্বামাম মাহমূদানিল্লাজি ওয়া'আদতাহ।”",
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(10.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    Text(
+                        text = "অর্থ:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "হে আল্লাহ! এই পরিপূর্ণ আহ্বান ও আসন্ন প্রতিষ্ঠিত সালাতের মালিক, মুহাম্মদ (সাঃ)-কে দান করুন উসিলা (মর্যাদা) ও শ্রেষ্ঠত্ব, এবং তাঁকে পৌঁছে দিন সেই প্রশংসিত স্থানে, যার ওয়াদা আপনি তাঁকে দিয়েছেন। (সহীহ বুখারী)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = { showAdhanInfoDialog = false },
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = EmeraldPrimary, contentColor = Color.White)
+                ) {
+                    Text("বন্ধ করুন")
                 }
             }
         )
