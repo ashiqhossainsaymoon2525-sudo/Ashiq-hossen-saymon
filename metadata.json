@@ -1,0 +1,6 @@
+{
+  "name": "নূর ইসলাম",
+  "description": "নামাজের সময়সূচী, পবিত্র কুরআন তেলাওয়াত এবং নির্ভুল কিবলা কম্পাস সংবলিত পূর্ণাঙ্গ ইসলামিক অ্যাপ।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
